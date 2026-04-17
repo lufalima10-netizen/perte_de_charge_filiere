@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Explorateur — Perte de charge ΔP</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #21262d;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --text3: #6e7681;
+    --blue: #58a6ff;
+    --blue-dim: rgba(88,166,255,0.12);
+    --teal: #39d353;
+    --teal-dim: rgba(57,211,83,0.10);
+    --accent: #f0883e;
+    --accent-dim: rgba(240,136,62,0.12);
+    --font-sans: 'IBM Plex Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    padding: 28px 32px;
+    gap: 20px;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header-left { flex: 1; }
+  .header-tag {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--blue);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .header-title {
+    font-size: 22px;
+    font-weight: 300;
+    color: var(--text);
+    letter-spacing: -0.02em;
+  }
+  .header-title span { color: var(--blue); font-weight: 500; }
+  .formula-pill {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    background: var(--blue-dim);
+    border: 1px solid rgba(88,166,255,0.25);
+    color: var(--blue);
+    padding: 10px 18px;
+    border-radius: 6px;
+    white-space: nowrap;
+    align-self: center;
+  }
+
+  /* Controls */
+  .controls-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .ctrl-panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+  }
+  .ctrl-panel-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--text3);
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .ctrl-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .ctrl-row:last-child { margin-bottom: 0; }
+  .ctrl-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text2);
+    width: 90px;
+    flex-shrink: 0;
+  }
+  .ctrl-label span { color: var(--text3); font-size: 10px; }
+  .ctrl-val {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+    min-width: 80px;
+    text-align: right;
+  }
+
+  input[type=range] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 3px;
+    background: var(--bg3);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--blue);
+    border: 2px solid var(--bg);
+    cursor: pointer;
+    transition: transform 0.1s;
+  }
+  input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.2); }
+  input[type=range].teal::-webkit-slider-thumb { background: var(--teal); }
+  input[type=range].accent::-webkit-slider-thumb { background: var(--accent); }
+
+  /* Metrics */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0,1fr));
+    gap: 10px;
+  }
+  .mcard {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+  }
+  .mcard.highlight { border-color: rgba(88,166,255,0.3); background: var(--blue-dim); }
+  .mlabel {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+  }
+  .mval {
+    font-family: var(--font-mono);
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .mval.blue { color: var(--blue); }
+  .munit {
+    font-size: 10px;
+    color: var(--text3);
+    margin-top: 2px;
+    font-family: var(--font-mono);
+  }
+
+  /* Charts */
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    flex: 1;
+  }
+  .chart-panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+  }
+  .chart-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .chart-title span { color: var(--blue); }
+  .chart-wrap {
+    position: relative;
+    flex: 1;
+    min-height: 180px;
+  }
+
+  /* Sensitivity */
+  .sens-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .sens-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .sens-eq {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text3);
+    flex: 1;
+    line-height: 1.5;
+  }
+  .sens-val {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+
+  /* Footer note */
+  .footnote {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text3);
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 16px;
+    line-height: 1.7;
+  }
+  .footnote b { color: var(--text2); font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <p class="header-tag">Analyse de sensibilité — conduite cylindrique</p>
+    <h1 class="header-title">Perte de charge <span>ΔP(L, R)</span></h1>
+  </div>
+  <div class="formula-pill">ΔP = α·L + β·(1 − R²/0,002025)²</div>
+</div>
+
+<div class="controls-grid">
+  <div class="ctrl-panel">
+    <p class="ctrl-panel-title">Constantes</p>
+    <div class="ctrl-row">
+      <span class="ctrl-label">α <span>(Pa/m)</span></span>
+      <input type="range" id="alpha" min="0.1" max="20" step="0.1" value="1">
+      <span class="ctrl-val" id="alpha-out">1.0</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-label">β <span>(Pa)</span></span>
+      <input type="range" id="beta" min="0.1" max="50" step="0.1" value="10" class="accent">
+      <span class="ctrl-val" id="beta-out">10.0</span>
+    </div>
+  </div>
+  <div class="ctrl-panel">
+    <p class="ctrl-panel-title">Point d'évaluation</p>
+    <div class="ctrl-row">
+      <span class="ctrl-label">L <span>(m)</span></span>
+      <input type="range" id="L" min="0.001" max="0.020" step="0.0001" value="0.006">
+      <span class="ctrl-val" id="L-out">0.0060 m</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-label">R <span>(m)</span></span>
+      <input type="range" id="R" min="0.001" max="0.010" step="0.0001" value="0.0032" class="teal">
+      <span class="ctrl-val" id="R-out">0.0032 m</span>
+    </div>
+  </div>
+</div>
+
+<div class="metrics-grid">
+  <div class="mcard highlight">
+    <p class="mlabel">ΔP total</p>
+    <p class="mval blue" id="dp-total">—</p>
+    <p class="munit">Pascal (Pa)</p>
+  </div>
+  <div class="mcard">
+    <p class="mlabel">Contribution α·L</p>
+    <p class="mval" id="dp-L">—</p>
+    <p class="munit" id="dp-L-pct">—</p>
+  </div>
+  <div class="mcard">
+    <p class="mlabel">Contribution β·f(R)</p>
+    <p class="mval" id="dp-R">—</p>
+    <p class="munit" id="dp-R-pct">—</p>
+  </div>
+  <div class="mcard">
+    <p class="mlabel">R²/0,002025</p>
+    <p class="mval" id="ratio">—</p>
+    <p class="munit">→ f(R) ≈ <span id="fR-val">—</span>·β</p>
+  </div>
+</div>
+
+<div class="charts-grid">
+  <div class="chart-panel">
+    <div class="chart-title">ΔP vs L &nbsp;— R = <span id="lbl-R">0.0032</span> m fixé</div>
+    <div class="chart-wrap"><canvas id="chartL" role="img" aria-label="ΔP en fonction de L"></canvas></div>
+  </div>
+  <div class="chart-panel">
+    <div class="chart-title">ΔP vs R &nbsp;— L = <span id="lbl-L">0.0060</span> m fixé</div>
+    <div class="chart-wrap"><canvas id="chartR" role="img" aria-label="ΔP en fonction de R"></canvas></div>
+  </div>
+</div>
+
+<div class="sens-grid">
+  <div class="sens-card">
+    <div class="sens-eq">∂ΔP/∂L = α<br><span style="color:#6e7681">contribution linéaire, indép. de R</span></div>
+    <div class="sens-val" id="sens-L">—</div>
+  </div>
+  <div class="sens-card">
+    <div class="sens-eq">∂ΔP/∂R = −β · 4R·(1−R²/0,002025) / 0,002025<br><span style="color:#6e7681">sensibilité au rayon au point courant</span></div>
+    <div class="sens-val" id="sens-R">—</div>
+  </div>
+</div>
+
+<div class="footnote">
+  <b>R* = √0,002025 = 0,045 m</b> — rayon d'équilibre où β·f(R) = 0 &nbsp;|&nbsp;
+  Dans la plage explorée (R ≤ 0,010 m), R²/0,002025 ≤ 0,049 → f(R) ≥ 0,902 : la contribution β est quasi-maximale et peu sensible à R &nbsp;|&nbsp;
+  <b>Levier principal : α et β</b>
+</div>
+
+<script>
+const C = 0.002025;
+const f    = (a,b,L,R) => a*L + b*Math.pow(1 - R*R/C, 2);
+const dfdR = (b,R)     => b*2*(1 - R*R/C)*(-2*R/C);
+const $    = id => document.getElementById(id);
+
+function fmt(v) {
+  const a = Math.abs(v);
+  if (a === 0) return '0';
+  if (a >= 1000) return v.toExponential(2);
+  if (a >= 100)  return v.toFixed(1);
+  if (a >= 1)    return v.toFixed(3);
+  return v.toExponential(3);
+}
+
+const chartDefaults = {
+  responsive: true, maintainAspectRatio: false,
+  plugins: { legend: { display: false }, tooltip: {
+    backgroundColor: '#161b22', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
+    titleColor: '#8b949e', bodyColor: '#e6edf3', titleFont: { family: 'IBM Plex Mono', size: 11 },
+    bodyFont: { family: 'IBM Plex Mono', size: 11 }, padding: 10,
+    callbacks: { label: ctx => 'ΔP = ' + fmt(ctx.parsed.y) + ' Pa' }
+  }},
+  scales: {
+    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#6e7681', font: { family: 'IBM Plex Mono', size: 10 }, maxTicksLimit: 6 },
+         title: { display: false } },
+    y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#6e7681', font: { family: 'IBM Plex Mono', size: 10 }, callback: v => fmt(v) },
+         title: { display: false } }
+  }
+};
+
+const mkDatasets = (lineColor, fillColor) => [
+  { data: [], borderColor: lineColor, backgroundColor: fillColor, borderWidth: 2, pointRadius: 0, fill: true, tension: 0.35 },
+  { data: [], borderColor: '#58a6ff', backgroundColor: '#58a6ff', pointRadius: 5, showLine: false }
+];
+
+const cL = new Chart($('chartL'), { type:'line', data:{ labels:[], datasets: mkDatasets('#58a6ff','rgba(88,166,255,0.08)') }, options: JSON.parse(JSON.stringify(chartDefaults)) });
+const cR = new Chart($('chartR'), { type:'line', data:{ labels:[], datasets: mkDatasets('#39d353','rgba(57,211,83,0.08)') }, options: JSON.parse(JSON.stringify(chartDefaults)) });
+cR.data.datasets[1].borderColor = '#39d353';
+cR.data.datasets[1].backgroundColor = '#39d353';
+
+function update() {
+  const alpha = parseFloat($('alpha').value);
+  const beta  = parseFloat($('beta').value);
+  const L0    = parseFloat($('L').value);
+  const R0    = parseFloat($('R').value);
+
+  $('alpha-out').textContent = alpha.toFixed(1);
+  $('beta-out').textContent  = beta.toFixed(1);
+  $('L-out').textContent     = L0.toFixed(4) + ' m';
+  $('R-out').textContent     = R0.toFixed(4) + ' m';
+  $('lbl-R').textContent     = R0.toFixed(4);
+  $('lbl-L').textContent     = L0.toFixed(4);
+
+  const dp   = f(alpha, beta, L0, R0);
+  const dpL  = alpha * L0;
+  const dpR  = beta * Math.pow(1 - R0*R0/C, 2);
+  const pctL = dp !== 0 ? (dpL/dp*100) : 0;
+  const pctR = dp !== 0 ? (dpR/dp*100) : 0;
+  const ratio = R0*R0/C;
+  const frac  = Math.pow(1 - ratio, 2);
+
+  $('dp-total').textContent  = fmt(dp);
+  $('dp-L').textContent      = fmt(dpL);
+  $('dp-L-pct').textContent  = pctL.toFixed(1) + '% du total';
+  $('dp-R').textContent      = fmt(dpR);
+  $('dp-R-pct').textContent  = pctR.toFixed(1) + '% du total';
+  $('ratio').textContent     = ratio.toFixed(5);
+  $('fR-val').textContent    = frac.toFixed(4);
+  $('sens-L').textContent    = fmt(alpha) + ' Pa/m';
+  $('sens-R').textContent    = fmt(dfdR(beta, R0)) + ' Pa/m';
+
+  const nL = 80;
+  const Lv = Array.from({length:nL}, (_,i) => 0.001 + i*(0.020-0.001)/(nL-1));
+  cL.data.labels = Lv.map(v => v.toFixed(4));
+  cL.data.datasets[0].data = Lv.map(v => f(alpha,beta,v,R0));
+  const clL = Lv.reduce((b,v) => Math.abs(v-L0)<Math.abs(b-L0)?v:b, Lv[0]);
+  cL.data.datasets[1].data = Lv.map(v => v===clL ? f(alpha,beta,v,R0) : null);
+  cL.update('none');
+
+  const nR = 100;
+  const Rv = Array.from({length:nR}, (_,i) => 0.001 + i*(0.010-0.001)/(nR-1));
+  cR.data.labels = Rv.map(v => v.toFixed(4));
+  cR.data.datasets[0].data = Rv.map(v => f(alpha,beta,L0,v));
+  const clR = Rv.reduce((b,v) => Math.abs(v-R0)<Math.abs(b-R0)?v:b, Rv[0]);
+  cR.data.datasets[1].data = Rv.map(v => v===clR ? f(alpha,beta,L0,v) : null);
+  cR.update('none');
+}
+
+['alpha','beta','L','R'].forEach(id => $(id).addEventListener('input', update));
+update();
+</script>
+</body>
+</html>
